@@ -1,0 +1,20 @@
+# Docs stay local. Only README.md may be on GitHub.
+*.md
+!README.md
+MDs/
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.env
+.env.*
+!.env.example
+calls.db
+cache/
+*.parquet
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db
