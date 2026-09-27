@@ -109,6 +109,12 @@ class ViewCardTests(unittest.TestCase):
         self.assertEqual(banner["text"], "BUY")
         rows = view.target_table_rows(payload)
         self.assertEqual(rows[1]["Verdict"], "recommended")
+        self.assertIsNone(view.model_line(payload))
+        payload["model"] = "nvidia/nemotron-3-ultra-550b-a55b:free"
+        self.assertEqual(
+            view.model_line(payload),
+            "Model: nvidia/nemotron-3-ultra-550b-a55b:free",
+        )
         self.assertIn("gap-down", view.card_gap_risk())
         self.assertIn("Educational research only", view.card_disclaimer())
 
@@ -123,6 +129,40 @@ class ViewCardTests(unittest.TestCase):
         self.assertIn("Fewer than 50", banner["text"])
         self.assertEqual(view.format_rupees(payload["plan"]["stop_loss"]), "₹98.00")
         self.assertEqual(view.format_rupees(payload["plan"]["stop_loss"]), "₹98.00")
+
+    def test_watchlist_line_renders_stored_fields_only(self):
+        frozen = {
+            "ticker": "RELIANCE.NS",
+            "price_at_add": 100.0,
+            "action": "BUY",
+            "entry": 100.0,
+            "stop_loss": 98.0,
+            "recommended_target": 106.0,
+            "sell_by_day": 10,
+            "sell_by_date": "2026-10-08",
+            "latest_price": None,
+            "change_pct": None,
+            "outcome": None,
+        }
+        line = view.watchlist_line(frozen)
+        self.assertIn("RELIANCE.NS", line)
+        self.assertIn("added at ₹100.00", line)
+        self.assertIn("we said BUY", line)
+        self.assertIn("entry ₹100.00", line)
+        self.assertIn("stop ₹98.00", line)
+        self.assertIn("target ₹106.00", line)
+        self.assertIn("sell by day 10 · 2026-10-08", line)
+        self.assertNotIn("now", line)
+
+        with_mark = dict(frozen)
+        with_mark["latest_price"] = 104.0
+        with_mark["change_pct"] = 4.0
+        with_mark["outcome"] = "target"
+        with_mark["exit_day"] = 2
+        with_mark["fill_price"] = 106.0
+        marked = view.watchlist_line(with_mark)
+        self.assertIn("now ₹104.00 (+4.0%)", marked)
+        self.assertIn("outcome target · day 2 · ₹106.00", marked)
 
 
 if __name__ == "__main__":

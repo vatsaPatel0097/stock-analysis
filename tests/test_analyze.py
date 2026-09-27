@@ -84,6 +84,7 @@ class AnalyzeBuyTests(unittest.TestCase):
         self.assertEqual(payload["ticker"], "RELIANCE.NS")
         self.assertIsNone(payload["news"])
         self.assertIsNone(payload["explanation"])
+        self.assertIsNone(payload["model"])
         self.assertEqual(payload["plan"]["action"], "BUY")
         self.assertIsNone(payload["skip_reason"])
         entry = payload["plan"]["entry"]
@@ -237,6 +238,7 @@ class AnalyzeLlmTests(unittest.TestCase):
         self.assertEqual(payload["plan"]["action"], "BUY")
         self.assertIsNone(payload["news"])
         self.assertIsNone(payload["explanation"])
+        self.assertIsNone(payload["model"])
         self.assertEqual(payload["plan"]["stop_pct"], 2.0)
         self.assertGreaterEqual(payload["confidence_basis"]["sample_size"], 50)
 

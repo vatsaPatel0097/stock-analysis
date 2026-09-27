@@ -155,9 +155,64 @@ def action_banner(payload: dict) -> dict[str, str]:
     return {"action": action, "text": text}
 
 
+def model_line(payload: dict) -> str | None:
+    model = payload.get("model")
+    if not isinstance(model, str) or not model.strip():
+        return None
+    return f"Model: {model.strip()}"
+
+
 def card_gap_risk() -> str:
     return gap_risk_note()
 
 
 def card_disclaimer() -> str:
     return DISCLAIMER
+
+
+def watchlist_line(row: dict) -> str:
+    """One memory line from stored snapshot + mark fields. No math."""
+    ticker = str(row.get("ticker") or "")
+    added = format_rupees(row.get("price_at_add"))
+    action = str(row.get("action") or "")
+    entry = format_rupees(row.get("entry"))
+    stop = format_rupees(row.get("stop_loss"))
+    target = format_rupees(row.get("recommended_target"))
+    sell_day = row.get("sell_by_day")
+    sell_date = row.get("sell_by_date")
+    if sell_day is None:
+        sell_by = "—"
+    else:
+        sell_by = f"day {sell_day}"
+        if sell_date:
+            sell_by = f"{sell_by} · {sell_date}"
+
+    left = (
+        f"{ticker} · added at {added} · we said {action} · "
+        f"entry {entry} · stop {stop} · target {target} · sell by {sell_by}"
+    )
+
+    latest = row.get("latest_price")
+    if latest is None:
+        return left
+
+    change = row.get("change_pct")
+    now = format_rupees(latest)
+    if change is None:
+        right = f"now {now}"
+    else:
+        sign = "+" if float(change) > 0 else ""
+        right = f"now {now} ({sign}{format_percent(change)})"
+
+    outcome = row.get("outcome")
+    if outcome:
+        fill = row.get("fill_price")
+        exit_day = row.get("exit_day")
+        outcome_bits = [str(outcome)]
+        if exit_day is not None:
+            outcome_bits.append(f"day {exit_day}")
+        if fill is not None:
+            outcome_bits.append(format_rupees(fill))
+        right = f"{right} · outcome {' · '.join(outcome_bits)}"
+
+    return f"{left} · {right}"

@@ -11,11 +11,17 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from config import LLM_DAILY_CAP, OPENROUTER_FALLBACK_MODEL, OPENROUTER_MODEL
+from config import (
+    LLM_DAILY_CAP,
+    OPENROUTER_FALLBACK_MODEL,
+    OPENROUTER_MODEL,
+    OPENROUTER_REASONING_EFFORT,
+)
 
 IST = ZoneInfo("Asia/Kolkata")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _DEFAULT_CACHE = Path("cache") / "llm"
+_ENV_LOADED = False
 
 Transport = Callable[[str, dict[str, Any], dict[str, str]], dict[str, Any] | None]
 
@@ -51,6 +57,7 @@ def complete(
     if cached is not None:
         return cached
 
+    _load_dotenv()
     key = api_key if api_key is not None else os.environ.get("OPENROUTER_API_KEY")
     if not key or not str(key).strip():
         return None
@@ -59,7 +66,7 @@ def complete(
     backup = fallback_model if fallback_model is not None else OPENROUTER_FALLBACK_MODEL
     send = transport if transport is not None else _http_transport
 
-    parsed = _try_model(
+    parsed, served = _try_model(
         send,
         key=str(key).strip(),
         model=primary,
@@ -69,11 +76,11 @@ def complete(
         session=session,
     )
     if parsed is not None:
-        _write_cache(root, symbol, session, name, parsed)
+        _write_cache(root, symbol, session, name, parsed, served or primary)
         return parsed
 
     if backup and backup != primary:
-        parsed = _try_model(
+        parsed, served = _try_model(
             send,
             key=str(key).strip(),
             model=backup,
@@ -83,7 +90,7 @@ def complete(
             session=session,
         )
         if parsed is not None:
-            _write_cache(root, symbol, session, name, parsed)
+            _write_cache(root, symbol, session, name, parsed, served or backup)
             return parsed
     return None
 
@@ -97,9 +104,8 @@ def _try_model(
     schema: dict[str, Any] | None,
     root: Path,
     session: date,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str | None]:
     """One model: up to two HTTP attempts. Count every attempt. Cap refuses before send."""
-    last: dict[str, Any] | None = None
     for _ in range(2):
         _reserve_slot(root, session)
         body = _request_body(model, messages, schema)
@@ -112,13 +118,13 @@ def _try_model(
         except LlmCapError:
             raise
         except Exception:
-            return None
+            return None, None
         if raw is None:
-            return None
+            return None, None
         last = _extract_json(raw)
         if last is not None:
-            return last
-    return last
+            return last, _served_model(raw, model)
+    return None, None
 
 
 def _request_body(
@@ -130,6 +136,7 @@ def _request_body(
         "model": model,
         "messages": messages,
         "temperature": 0,
+        "reasoning": {"effort": OPENROUTER_REASONING_EFFORT},
     }
     if schema is not None:
         body["response_format"] = {
@@ -149,7 +156,7 @@ def _http_transport(
     headers: dict[str, str],
 ) -> dict[str, Any] | None:
     try:
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=120.0) as client:
             response = client.post(url, json=body, headers=headers)
             response.raise_for_status()
             return response.json()
@@ -222,7 +229,12 @@ def _read_cache(root: Path, ticker: str, day: date, step: str) -> dict[str, Any]
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    body = data.get("body")
+    if "model" in data and isinstance(body, dict):
+        return body
+    return data
 
 
 def _write_cache(
@@ -231,10 +243,67 @@ def _write_cache(
     day: date,
     step: str,
     payload: dict[str, Any],
+    model: str,
 ) -> None:
     path = _cache_path(root, ticker, day, step)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+    envelope = {"model": model, "body": payload}
+    path.write_text(json.dumps(envelope, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def model_used(
+    ticker: str,
+    day: date,
+    step: str,
+    *,
+    cache_dir: Path | str | None = None,
+) -> str | None:
+    """Model id that produced the cached step, or None when that step did not run."""
+    root = _cache_root(cache_dir)
+    path = _cache_path(root, _require_ticker(ticker), _as_of_date(day), _require_step(step))
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    name = data.get("model")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None
+
+
+def _served_model(raw: dict[str, Any], requested: str) -> str:
+    served = raw.get("model") if isinstance(raw, dict) else None
+    if isinstance(served, str) and served.strip():
+        return served.strip()
+    return requested
+
+
+def _load_dotenv() -> None:
+    """Load ``.env`` once. An existing environment variable wins."""
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
+    path = Path(__file__).resolve().parents[1] / ".env"
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _cache_path(root: Path, ticker: str, day: date, step: str) -> Path:

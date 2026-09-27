@@ -211,6 +211,13 @@ body,
   color: var(--text-secondary);
 }
 
+.ssa-model {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  margin-top: var(--space-3);
+}
+
 .ssa-gap {
   color: var(--text-secondary);
   font-size: var(--font-sm);
@@ -230,4 +237,36 @@ body,
 .ssa-pick-heading {
   font-weight: var(--weight-semibold);
   margin-bottom: var(--space-3);
+}
+
+.ssa-watchlist {
+  margin: var(--space-6) 0 var(--space-4);
+  padding: var(--space-4);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.ssa-watchlist-title {
+  font-weight: var(--weight-semibold);
+  font-size: var(--font-md);
+  margin-bottom: var(--space-3);
+  color: var(--text-primary);
+}
+
+.ssa-watchlist-line {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ssa-watchlist-line:first-of-type {
+  border-top: none;
+}
+
+.ssa-watchlist-empty {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
 }

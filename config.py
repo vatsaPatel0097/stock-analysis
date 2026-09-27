@@ -14,5 +14,7 @@ MIN_SAMPLE_SIZE = 50
 CHASE_PCT = 0.015
 
 # Free OpenRouter models (R3.5). Recorded in DECISIONS.md on 2026-09-27.
-OPENROUTER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+# Ultra is the strongest free reasoning model that still returns strict JSON.
+OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+OPENROUTER_REASONING_EFFORT = "high"

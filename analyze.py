@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from agents.client import model_used
 from agents.events_agent import run_events
 from agents.explainer_agent import run_explainer
 from agents.news_agent import run_news
@@ -58,6 +59,7 @@ _SECTION3_KEYS = (
     "risk_flags",
     "news",
     "explanation",
+    "model",
     "skip_reason",
     "disclaimer",
 )
@@ -241,6 +243,7 @@ def analyze(
         "risk_flags": risk_flags,
         "news": news_payload,
         "explanation": None,
+        "model": None,
         "skip_reason": skip_reason,
         "disclaimer": DISCLAIMER,
     }
@@ -251,9 +254,27 @@ def analyze(
         cache_dir=cache_dir,
     )
     payload["explanation"] = explanation
+    payload["model"] = _llm_model_label(ticker, day, cache_dir)
     _assert_section3(payload)
     append_call(payload, calls_path)
     return payload
+
+
+def _llm_model_label(ticker: str, day: date, cache_dir: Path | str | None) -> str | None:
+    """Distinct model ids that answered news, events, or the explanation."""
+    seen: list[str] = []
+    for step in ("news", "events", "explain"):
+        try:
+            name = model_used(ticker, day, step, cache_dir=cache_dir)
+        except (TypeError, ValueError):
+            name = None
+        if name and name not in seen:
+            seen.append(name)
+    if not seen:
+        return None
+    if len(seen) == 1:
+        return seen[0]
+    return ", ".join(seen)
 
 
 def _llm_news_and_events(
@@ -555,6 +576,8 @@ def format_card(payload: dict) -> str:
         lines.append(f"News ({sentiment}): {news['summary']}")
     if payload.get("explanation"):
         lines.append(str(payload["explanation"]))
+    if payload.get("model"):
+        lines.append(f"Model: {payload['model']}")
     lines.append(gap_risk_note())
     lines.append(payload["disclaimer"])
     return "\n".join(lines)

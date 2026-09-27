@@ -15,6 +15,9 @@ if str(ROOT) not in sys.path:
 from analyze import AmbiguousQuery, analyze
 from data.prices import PriceError
 from data.resolve import ResolveError
+from eval.watchlist import list_memory, refresh_marks
+from store.calls import DEFAULT_PATH
+from store.watchlist import add_snapshot
 from ui import view
 
 _THEME = Path(__file__).with_name("theme.css")
@@ -22,6 +25,13 @@ _THEME = Path(__file__).with_name("theme.css")
 
 def _load_theme() -> str:
     return _THEME.read_text(encoding="utf-8")
+
+
+def _db_path() -> Path:
+    raw = os.environ.get("SSA_DB")
+    if raw:
+        return Path(raw)
+    return DEFAULT_PATH
 
 
 def _fixture_kwargs():
@@ -73,8 +83,21 @@ def _fixture_kwargs():
     }
 
 
+def _price_loader_for_marks():
+    fixtures = _fixture_kwargs()
+    loader = fixtures.get("price_loader")
+    if loader is None:
+        return None
+
+    def _marks_loader(ticker: str):
+        return loader(ticker)
+
+    return _marks_loader
+
+
 def _run_analyze(query: str, user_target: float | None):
     kwargs = _fixture_kwargs()
+    kwargs["calls_path"] = _db_path()
     return analyze(query, user_target=user_target, **kwargs)
 
 
@@ -125,8 +148,41 @@ def _render_card(payload: dict) -> None:
         st.markdown(f"**News** ({news.get('sentiment', '')}): {news.get('summary', '')}")
     if payload.get("explanation"):
         st.markdown(payload["explanation"])
+    used = view.model_line(payload)
+    if used:
+        st.markdown(f"<p class='ssa-model'>{used}</p>", unsafe_allow_html=True)
 
     st.markdown(f"<p class='ssa-gap'>{view.card_gap_risk()}</p>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.button("Add to watchlist", key="add-watchlist"):
+        add_snapshot(payload, _db_path())
+        st.rerun()
+
+
+def _render_watchlist() -> None:
+    db = _db_path()
+    loader = _price_loader_for_marks()
+    try:
+        refresh_marks(db, price_loader=loader)
+    except Exception:
+        pass
+    rows = list_memory(db)
+    st.markdown('<div class="ssa-watchlist">', unsafe_allow_html=True)
+    st.markdown('<div class="ssa-watchlist-title">Watchlist memory</div>', unsafe_allow_html=True)
+    if not rows:
+        st.markdown(
+            '<p class="ssa-watchlist-empty">Add a card to freeze price and plan. '
+            "Later checks show what it became.</p>",
+            unsafe_allow_html=True,
+        )
+    else:
+        for row in rows:
+            line = view.watchlist_line(row)
+            st.markdown(
+                f'<div class="ssa-watchlist-line">{line}</div>',
+                unsafe_allow_html=True,
+            )
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -213,6 +269,8 @@ def main() -> None:
         _render_card(st.session_state.result)
     else:
         st.markdown(f"<p class='ssa-empty'>{view.empty_message()}</p>", unsafe_allow_html=True)
+
+    _render_watchlist()
 
     st.markdown(
         f"<p class='ssa-disclaimer'>{view.card_disclaimer()}</p>",

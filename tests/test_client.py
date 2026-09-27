@@ -8,7 +8,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from agents.client import LlmCapError, complete, daily_count
+from agents.client import LlmCapError, complete, daily_count, model_used
 from config import LLM_DAILY_CAP
 
 _DAY = date(2026, 9, 27)
@@ -170,9 +170,11 @@ class ClientRetryTests(unittest.TestCase):
                 model="model-a",
                 fallback_model="model-b",
             )
+            used = model_used(_TICKER, _DAY, "events", cache_dir=root)
 
         self.assertEqual(result, {"via": "fallback"})
         self.assertEqual(models, ["model-a", "model-b"])
+        self.assertEqual(used, "model-b")
 
     def test_missing_api_key_returns_none_without_counting(self):
         calls = {"n": 0}
@@ -199,6 +201,36 @@ class ClientRetryTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(calls["n"], 0)
         self.assertEqual(counted, 0)
+
+
+class ClientModelTests(unittest.TestCase):
+    def test_response_model_is_recorded_and_not_returned(self):
+        seen: dict = {}
+
+        def transport(url, body, headers):
+            seen["reasoning"] = body.get("reasoning")
+            raw = _ok_response({"sentiment": "neutral", "summary": "ok"})
+            raw["model"] = "nvidia/nemotron-3-ultra-550b-a55b:free"
+            return raw
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = complete(
+                _TICKER,
+                _DAY,
+                "explain",
+                [{"role": "user", "content": "hi"}],
+                cache_dir=root,
+                transport=transport,
+                api_key="test-key",
+                model="model-a",
+                fallback_model="model-b",
+            )
+            used = model_used(_TICKER, _DAY, "explain", cache_dir=root)
+
+        self.assertEqual(result, {"sentiment": "neutral", "summary": "ok"})
+        self.assertEqual(used, "nvidia/nemotron-3-ultra-550b-a55b:free")
+        self.assertEqual(seen["reasoning"], {"effort": "high"})
 
 
 if __name__ == "__main__":
