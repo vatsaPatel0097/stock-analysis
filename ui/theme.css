@@ -1,0 +1,233 @@
+/* Design tokens from MDs/ui-token.md. Do not hardcode hex in Python. */
+
+:root {
+  --bg-app: #0f1419;
+  --bg-surface: #1a222c;
+  --bg-elevated: #232d3a;
+  --bg-input: #121820;
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-focus: #3d9cf0;
+
+  --text-primary: #f3f6f9;
+  --text-secondary: #9aa8b6;
+  --text-muted: #6d7b88;
+  --text-inverse: #0f1419;
+
+  --accent: #3d9cf0;
+  --accent-muted: rgba(61, 156, 240, 0.16);
+
+  --action-buy: #2f9e6a;
+  --action-buy-bg: rgba(47, 158, 106, 0.14);
+  --action-wait: #d4a017;
+  --action-wait-bg: rgba(212, 160, 23, 0.14);
+  --action-skip: #d4544e;
+  --action-skip-bg: rgba(212, 84, 78, 0.14);
+
+  --target-recommended: #3d9cf0;
+  --target-recommended-bg: rgba(61, 156, 240, 0.12);
+  --target-low-odds: #9aa8b6;
+  --target-unrealistic: #6d7b88;
+
+  --status-danger: #d4544e;
+  --status-warning: #d4a017;
+  --status-ok: #2f9e6a;
+
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+
+  --font-xs: 0.75rem;
+  --font-sm: 0.875rem;
+  --font-base: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.5rem;
+  --font-2xl: 2rem;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+html,
+body,
+[data-testid="stApp"] {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.ssa-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+.ssa-title {
+  font-size: var(--font-2xl);
+  font-weight: var(--weight-semibold);
+  margin: 0;
+}
+
+.ssa-subtitle {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  margin: var(--space-1) 0 var(--space-6);
+}
+
+.ssa-empty {
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  margin: var(--space-4) 0;
+}
+
+.ssa-error {
+  background: var(--action-skip-bg);
+  color: var(--action-skip);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+.ssa-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+  margin: var(--space-4) 0;
+}
+
+.ssa-price-current {
+  font-family: var(--font-mono);
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
+}
+
+.ssa-muted {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+
+.ssa-action {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--weight-semibold);
+  margin: var(--space-4) 0;
+}
+
+.ssa-action-buy {
+  color: var(--action-buy);
+  background: var(--action-buy-bg);
+}
+
+.ssa-action-wait {
+  color: var(--action-wait);
+  background: var(--action-wait-bg);
+}
+
+.ssa-action-skip {
+  color: var(--action-skip);
+  background: var(--action-skip-bg);
+}
+
+.ssa-plan {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.ssa-plan-cell {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.ssa-plan-label {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  margin-bottom: var(--space-1);
+}
+
+.ssa-plan-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-base);
+}
+
+.ssa-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-4) 0;
+  font-size: var(--font-sm);
+}
+
+.ssa-table th {
+  text-align: left;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-2);
+  font-weight: var(--weight-medium);
+}
+
+.ssa-table td {
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-2);
+}
+
+.ssa-row-recommended {
+  background: var(--target-recommended-bg);
+  color: var(--target-recommended);
+}
+
+.ssa-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.ssa-chip {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.ssa-gap {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  margin-top: var(--space-4);
+}
+
+.ssa-disclaimer {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  margin-top: var(--space-6);
+}
+
+.ssa-pick-list {
+  margin: var(--space-4) 0;
+}
+
+.ssa-pick-heading {
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-3);
+}
