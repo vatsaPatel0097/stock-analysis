@@ -1,0 +1,123 @@
+"""Frozen 100-name NSE universe for the pure-code backtest.
+
+Survivorship note (project.md §10.3): a watchlist of today's large caps
+excludes names that collapsed, so results on this set are optimistic.
+Frozen on 2026-09-27. Do not edit to chase a better score.
+"""
+
+from __future__ import annotations
+
+# Large-cap and liquid mid-cap NSE equities as of 2026-09-27.
+# Tickers are Yahoo ``SYMBOL.NS`` forms used throughout the project.
+UNIVERSE: tuple[str, ...] = (
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "BHARTIARTL.NS",
+    "ICICIBANK.NS",
+    "INFY.NS",
+    "SBIN.NS",
+    "LICI.NS",
+    "ITC.NS",
+    "HINDUNILVR.NS",
+    "LT.NS",
+    "BAJFINANCE.NS",
+    "HCLTECH.NS",
+    "MARUTI.NS",
+    "SUNPHARMA.NS",
+    "AXISBANK.NS",
+    "TITAN.NS",
+    "NTPC.NS",
+    "ULTRACEMCO.NS",
+    "M&M.NS",
+    "BAJAJFINSV.NS",
+    "POWERGRID.NS",
+    "WIPRO.NS",
+    "ONGC.NS",
+    "ADANIENT.NS",
+    "ADANIPORTS.NS",
+    "KOTAKBANK.NS",
+    "TMPV.NS",
+    "COALINDIA.NS",
+    "NESTLEIND.NS",
+    "ASIANPAINT.NS",
+    "JSWSTEEL.NS",
+    "TATASTEEL.NS",
+    "BAJAJ-AUTO.NS",
+    "HDFCLIFE.NS",
+    "GRASIM.NS",
+    "TECHM.NS",
+    "CIPLA.NS",
+    "SBILIFE.NS",
+    "DRREDDY.NS",
+    "HINDALCO.NS",
+    "INDUSINDBK.NS",
+    "DIVISLAB.NS",
+    "APOLLOHOSP.NS",
+    "EICHERMOT.NS",
+    "BRITANNIA.NS",
+    "HEROMOTOCO.NS",
+    "TRENT.NS",
+    "BPCL.NS",
+    "IOC.NS",
+    "VEDL.NS",
+    "SHREECEM.NS",
+    "PIDILITIND.NS",
+    "GODREJCP.NS",
+    "DABUR.NS",
+    "HAVELLS.NS",
+    "SIEMENS.NS",
+    "DLF.NS",
+    "AMBUJACEM.NS",
+    "ICICIPRULI.NS",
+    "ICICIGI.NS",
+    "BANKBARODA.NS",
+    "PNB.NS",
+    "CANBK.NS",
+    "UNIONBANK.NS",
+    "CHOLAFIN.NS",
+    "MUTHOOTFIN.NS",
+    "PFC.NS",
+    "RECLTD.NS",
+    "IRFC.NS",
+    "GAIL.NS",
+    "IGL.NS",
+    "PETRONET.NS",
+    "TATAPOWER.NS",
+    "TORNTPHARM.NS",
+    "LUPIN.NS",
+    "AUROPHARMA.NS",
+    "BIOCON.NS",
+    "ZYDUSLIFE.NS",
+    "ALKEM.NS",
+    "PERSISTENT.NS",
+    "COFORGE.NS",
+    "LTIM.NS",
+    "MPHASIS.NS",
+    "OFSS.NS",
+    "PAGEIND.NS",
+    "DIXON.NS",
+    "POLYCAB.NS",
+    "CUMMINSIND.NS",
+    "ABB.NS",
+    "BEL.NS",
+    "HAL.NS",
+    "BHEL.NS",
+    "NMDC.NS",
+    "SAIL.NS",
+    "JINDALSTEL.NS",
+    "INDIGO.NS",
+    "ZOMATO.NS",
+    "PAYTM.NS",
+    "NYKAA.NS",
+)
+
+FROZEN_ON = "2026-09-27"
+
+SURVIVORSHIP_NOTE = (
+    "A watchlist of today's large caps excludes stocks that collapsed. "
+    "Backtests on it are optimistic."
+)
+
+assert len(UNIVERSE) == 100, f"universe must have 100 names, got {len(UNIVERSE)}"
+assert len(set(UNIVERSE)) == 100, "universe tickers must be unique"
