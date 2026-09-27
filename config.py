@@ -13,6 +13,6 @@ MIN_AVG_TRADED_VALUE = 50_000_000  # ₹5 crore
 MIN_SAMPLE_SIZE = 50
 CHASE_PCT = 0.015
 
-# Placeholders until Phase 2 model pick (R3.5). Record the real ids in DECISIONS.md.
-OPENROUTER_MODEL = "CHANGE_ME/free-model"
-OPENROUTER_FALLBACK_MODEL = "CHANGE_ME/free-fallback"
+# Free OpenRouter models (R3.5). Recorded in DECISIONS.md on 2026-09-27.
+OPENROUTER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"

@@ -1,4 +1,4 @@
-"""Orchestrator: resolve → prices → math → gates → §3 JSON. CLI entry point."""
+"""Orchestrator: resolve → prices → math → LLM text → gates → §3 JSON. CLI entry point."""
 
 from __future__ import annotations
 
@@ -7,15 +7,20 @@ import math
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from agents.events_agent import run_events
+from agents.explainer_agent import run_explainer
+from agents.news_agent import run_news
 from analytics.indicators import atr
 from analytics.regime import regime as compute_regime
 from analytics.targets import RUNGS, ladder
 from config import STOP_PCT, WINDOW_DAYS
 from data.calendar import trading_days
+from data.news import fetch_headlines
 from data.prices import PriceError, fetch_daily
 from data.resolve import Candidate, ResolveError, resolve
 from rules.gates import (
@@ -77,12 +82,21 @@ def analyze(
     searcher=None,
     calls_path: Path | str | None = None,
     events: list[ScheduledEvent] | None = None,
+    headlines: list[dict[str, str]] | None = None,
+    headline_fetcher: Callable[..., list[dict[str, str]]] | None = None,
+    completer: Callable[..., dict[str, Any] | None] | None = None,
+    cache_dir: Path | str | None = None,
 ) -> dict:
     """Return the project.md §3 trade card for one resolved NSE stock.
 
-    ``user_target`` is a wished price in rupees. ``news`` and ``explanation``
-    are null until Phase 2. Ambiguous names raise ``AmbiguousQuery`` and are
-    not logged. Finished BUY / WAIT / SKIP rows are appended to the call log.
+    ``user_target`` is a wished price in rupees. LLM fields may be null when
+    the model fails; numbers still ship. Ambiguous names raise
+    ``AmbiguousQuery`` and are not logged. Finished BUY / WAIT / SKIP rows
+    are appended to the call log.
+
+    Pass ``events=[]`` and a stub ``headline_fetcher`` / ``completer`` in
+    tests so CI never hits RSS or OpenRouter. When ``events`` is None, the
+    events agent fills dates from headlines.
     """
     shown = _require_query(query)
     wished = _optional_rupees(user_target, "user_target")
@@ -93,6 +107,7 @@ def analyze(
         raise AmbiguousQuery(resolved.query, resolved.matches)
 
     ticker = resolved.ticker
+    company_name = _company_name(resolved)
     frame = _load_prices(ticker, day, price_loader)
     if len(frame) < 2:
         raise PriceError(f"Need at least two daily bars for {ticker}.")
@@ -127,10 +142,21 @@ def analyze(
     session = _session_date(frame.index[-1])
     window_end = _nth_trading_day_after(session, WINDOW_DAYS)
 
+    news_payload, scheduled = _llm_news_and_events(
+        ticker=ticker,
+        company_name=company_name,
+        day=day,
+        events=events,
+        headlines=headlines,
+        headline_fetcher=headline_fetcher,
+        completer=completer,
+        cache_dir=cache_dir,
+    )
+
     action, skip_reason, gate_note = _decide_action(
         stop_pct=STOP_PCT,
         atr_pct=float(atr_pct),
-        events=events if events is not None else [],
+        events=scheduled,
         window_start=session,
         window_end=window_end,
         avg_traded_value=avg_traded,
@@ -161,6 +187,8 @@ def analyze(
     now = datetime.now(IST)
     if as_of is not None:
         now = datetime(day.year, day.month, day.day, 15, 30, tzinfo=IST)
+
+    risk_flags = _risk_flags(scheduled, window_start=session, window_end=window_end)
 
     payload = {
         "query": shown,
@@ -210,15 +238,106 @@ def analyze(
             ),
             "above_200dma": reg.get("above_200dma"),
         },
-        "risk_flags": [],
-        "news": None,
+        "risk_flags": risk_flags,
+        "news": news_payload,
         "explanation": None,
         "skip_reason": skip_reason,
         "disclaimer": DISCLAIMER,
     }
+    explanation = run_explainer(
+        payload,
+        as_of=day,
+        completer=completer,
+        cache_dir=cache_dir,
+    )
+    payload["explanation"] = explanation
     _assert_section3(payload)
     append_call(payload, calls_path)
     return payload
+
+
+def _llm_news_and_events(
+    *,
+    ticker: str,
+    company_name: str | None,
+    day: date,
+    events: list[ScheduledEvent] | None,
+    headlines: list[dict[str, str]] | None,
+    headline_fetcher: Callable[..., list[dict[str, str]]] | None,
+    completer: Callable[..., dict[str, Any] | None] | None,
+    cache_dir: Path | str | None,
+) -> tuple[dict[str, Any] | None, list[ScheduledEvent]]:
+    """Load headlines, run news/events agents. Failures become null / []."""
+    rows = headlines
+    if rows is None:
+        try:
+            if headline_fetcher is not None:
+                rows = headline_fetcher(ticker, company_name, as_of=day)
+            else:
+                rows = fetch_headlines(ticker, company_name, as_of=day)
+        except Exception:
+            rows = []
+    if rows is None:
+        rows = []
+
+    news_payload = None
+    try:
+        news_payload = run_news(
+            ticker,
+            rows,
+            as_of=day,
+            completer=completer,
+            cache_dir=cache_dir,
+        )
+    except Exception:
+        news_payload = None
+
+    if events is not None:
+        return news_payload, list(events)
+
+    try:
+        scheduled = run_events(
+            ticker,
+            rows,
+            as_of=day,
+            completer=completer,
+            cache_dir=cache_dir,
+        )
+    except Exception:
+        scheduled = []
+    return news_payload, scheduled
+
+
+def _risk_flags(
+    events: list[ScheduledEvent],
+    *,
+    window_start: date,
+    window_end: date,
+) -> list[dict[str, Any]]:
+    """Build §3 risk_flags. inside_window and severity are code-owned."""
+    flags: list[dict[str, Any]] = []
+    for event in events:
+        inside = window_start <= event.on <= window_end
+        flags.append(
+            {
+                "type": event.kind,
+                "date": event.on.isoformat(),
+                "inside_window": inside,
+                "severity": "high" if inside else "low",
+            }
+        )
+    flags.sort(key=lambda row: row["date"])
+    return flags
+
+
+def _company_name(resolved) -> str | None:
+    ticker = resolved.ticker
+    for row in resolved.matches:
+        if row.ticker == ticker and row.name:
+            return str(row.name)
+    if resolved.matches and resolved.matches[0].name:
+        return str(resolved.matches[0].name)
+    return None
 
 
 def _decide_action(
@@ -430,6 +549,12 @@ def format_card(payload: dict) -> str:
             f"Your target ₹{row['price']:.2f}  +{row['pct']}%  "
             f"{row['prob'] * 100:.1f}%  {days}  {row['verdict']}"
         )
+    news = payload.get("news")
+    if isinstance(news, dict) and news.get("summary"):
+        sentiment = news.get("sentiment") or ""
+        lines.append(f"News ({sentiment}): {news['summary']}")
+    if payload.get("explanation"):
+        lines.append(str(payload["explanation"]))
     lines.append(gap_risk_note())
     lines.append(payload["disclaimer"])
     return "\n".join(lines)
@@ -443,7 +568,7 @@ def format_pick_list(query: str, matches: tuple[Candidate, ...]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="NSE swing research card (numbers only).")
+    parser = argparse.ArgumentParser(description="NSE swing research card.")
     parser.add_argument("query", help="Company name or NSE ticker")
     parser.add_argument(
         "--target",

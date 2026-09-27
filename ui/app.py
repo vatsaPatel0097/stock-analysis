@@ -61,7 +61,16 @@ def _fixture_kwargs():
     def searcher(query: str):
         return []
 
-    return {"price_loader": price_loader, "searcher": searcher}
+    def completer(*args, **kwargs):
+        return None
+
+    return {
+        "price_loader": price_loader,
+        "searcher": searcher,
+        "events": [],
+        "headlines": [],
+        "completer": completer,
+    }
 
 
 def _run_analyze(query: str, user_target: float | None):

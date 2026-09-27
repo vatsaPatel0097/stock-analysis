@@ -12,6 +12,7 @@ import pandas as pd
 from analyze import AmbiguousQuery, _SECTION3_KEYS, analyze, format_card, format_pick_list
 from data.prices import PriceError
 from data.resolve import Candidate, ResolveError
+from rules.gates import ScheduledEvent
 from store.calls import list_calls
 
 _AS_OF = date(2026, 9, 24)
@@ -19,6 +20,22 @@ _AS_OF = date(2026, 9, 24)
 
 def _forbid_search(query: str):
     raise AssertionError(f"search must not run for {query!r}")
+
+
+def _noop_completer(*args, **kwargs):
+    return None
+
+
+def _offline(**extra):
+    """Keep analyze() off RSS and OpenRouter in unit tests."""
+    base = {
+        "events": [],
+        "headlines": [],
+        "completer": _noop_completer,
+        "searcher": _forbid_search,
+    }
+    base.update(extra)
+    return base
 
 
 def _ohlcv(n: int, *, start: float = 100.0, step: float = 0.25, spread: float = 0.01, volume: float = 2_000_000.0) -> pd.DataFrame:
@@ -59,8 +76,8 @@ class AnalyzeBuyTests(unittest.TestCase):
                 "RELIANCE",
                 as_of=_AS_OF,
                 price_loader=_loader(frame),
-                searcher=_forbid_search,
                 calls_path=path,
+                **_offline(),
             )
 
         self.assertEqual(list(payload.keys()), list(_SECTION3_KEYS))
@@ -93,8 +110,8 @@ class AnalyzeSkipTests(unittest.TestCase):
                 "INFY",
                 as_of=_AS_OF,
                 price_loader=_loader(frame),
-                searcher=_forbid_search,
                 calls_path=path,
+                **_offline(),
             )
         self.assertEqual(payload["plan"]["action"], "SKIP")
         self.assertIn("50", payload["skip_reason"])
@@ -113,8 +130,8 @@ class AnalyzeTargetTests(unittest.TestCase):
                 user_target=wished,
                 as_of=_AS_OF,
                 price_loader=_loader(frame),
-                searcher=_forbid_search,
                 calls_path=path,
+                **_offline(),
             )
         self.assertIsNotNone(payload["user_target"])
         self.assertEqual(payload["user_target"]["price"], wished)
@@ -131,8 +148,8 @@ class AnalyzeErrorTests(unittest.TestCase):
                     "Tata",
                     as_of=_AS_OF,
                     price_loader=_loader(_ohlcv(80)),
-                    searcher=_forbid_search,
                     calls_path=path,
+                    **_offline(),
                 )
             self.assertGreaterEqual(len(raised.exception.matches), 2)
             self.assertEqual(list_calls(path), [])
@@ -146,7 +163,7 @@ class AnalyzeErrorTests(unittest.TestCase):
                 "DefinitelyNotAStockXYZ",
                 as_of=_AS_OF,
                 price_loader=_loader(_ohlcv(80)),
-                searcher=empty_search,
+                **_offline(searcher=empty_search),
             )
 
     def test_missing_prices_raise(self):
@@ -158,7 +175,7 @@ class AnalyzeErrorTests(unittest.TestCase):
                 "RELIANCE",
                 as_of=_AS_OF,
                 price_loader=bad_loader,
-                searcher=_forbid_search,
+                **_offline(),
             )
 
 
@@ -171,15 +188,15 @@ class AnalyzeLogTests(unittest.TestCase):
                 "RELIANCE",
                 as_of=_AS_OF,
                 price_loader=_loader(frame),
-                searcher=_forbid_search,
                 calls_path=path,
+                **_offline(),
             )
             second = analyze(
                 "INFY",
                 as_of=_AS_OF,
                 price_loader=_loader(frame),
-                searcher=_forbid_search,
                 calls_path=path,
+                **_offline(),
             )
             rows = list_calls(path)
         self.assertEqual(len(rows), 2)
@@ -187,6 +204,92 @@ class AnalyzeLogTests(unittest.TestCase):
         self.assertEqual(rows[1]["ticker"], "INFY.NS")
         self.assertEqual(rows[0]["payload"]["plan"]["action"], first["plan"]["action"])
         self.assertEqual(rows[1]["payload"]["plan"]["entry"], second["plan"]["entry"])
+
+
+class AnalyzeLlmTests(unittest.TestCase):
+    def test_broken_model_does_not_raise_and_numbers_ship(self):
+        frame = _ohlcv(80)
+
+        def garbage(ticker, day, step, messages, schema, **kwargs):
+            return {"not": "valid", "price": 999}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "calls.db"
+            payload = analyze(
+                "RELIANCE",
+                as_of=_AS_OF,
+                price_loader=_loader(frame),
+                calls_path=path,
+                **_offline(
+                    events=None,
+                    headlines=[
+                        {
+                            "title": "Reliance Industries note",
+                            "url": "https://example.com/r",
+                            "published": "2026-09-20T10:00:00+05:30",
+                        }
+                    ],
+                    completer=garbage,
+                ),
+            )
+
+        self.assertEqual(list(payload.keys()), list(_SECTION3_KEYS))
+        self.assertEqual(payload["plan"]["action"], "BUY")
+        self.assertIsNone(payload["news"])
+        self.assertIsNone(payload["explanation"])
+        self.assertEqual(payload["plan"]["stop_pct"], 2.0)
+        self.assertGreaterEqual(payload["confidence_basis"]["sample_size"], 50)
+
+    def test_earnings_inside_window_forces_skip(self):
+        frame = _ohlcv(80)
+        # Last bar is 2024-04-19 (80 business days from 2024-01-01).
+        session = date(2024, 4, 19)
+        inside = date(2024, 4, 30)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "calls.db"
+            payload = analyze(
+                "RELIANCE",
+                as_of=_AS_OF,
+                price_loader=_loader(frame),
+                calls_path=path,
+                **_offline(
+                    events=[ScheduledEvent(kind="earnings", on=inside)],
+                ),
+            )
+
+        self.assertEqual(payload["plan"]["action"], "SKIP")
+        self.assertIn("Earnings", payload["skip_reason"])
+        self.assertIn("2024-04-30", payload["skip_reason"])
+        self.assertEqual(len(payload["risk_flags"]), 1)
+        flag = payload["risk_flags"][0]
+        self.assertEqual(flag["type"], "earnings")
+        self.assertEqual(flag["date"], "2024-04-30")
+        self.assertTrue(flag["inside_window"])
+        self.assertEqual(flag["severity"], "high")
+        self.assertGreaterEqual(payload["confidence_basis"]["sample_size"], 50)
+        self.assertEqual(payload["plan"]["stop_pct"], 2.0)
+        self.assertEqual(session.isoformat(), "2024-04-19")
+
+    def test_earnings_outside_window_does_not_skip(self):
+        frame = _ohlcv(80)
+        outside = date(2024, 12, 15)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "calls.db"
+            payload = analyze(
+                "RELIANCE",
+                as_of=_AS_OF,
+                price_loader=_loader(frame),
+                calls_path=path,
+                **_offline(
+                    events=[ScheduledEvent(kind="earnings", on=outside)],
+                ),
+            )
+
+        self.assertEqual(payload["plan"]["action"], "BUY")
+        self.assertIsNone(payload["skip_reason"])
+        self.assertEqual(len(payload["risk_flags"]), 1)
+        self.assertFalse(payload["risk_flags"][0]["inside_window"])
+        self.assertEqual(payload["risk_flags"][0]["severity"], "low")
 
 
 class CliFormatTests(unittest.TestCase):
